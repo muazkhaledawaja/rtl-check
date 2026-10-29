@@ -1,0 +1,20 @@
+# Git
+.git
+.gitignore
+
+# Source (compiled to dist/ for publishing)
+src/
+
+# Tests
+tests/
+
+# Demo / dev assets
+sandbox/
+web/
+
+# Config
+tsconfig.json
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,40 @@
+{
+  "name": "rtl-check",
+  "version": "1.0.0",
+  "description": "CLI tool that scans React/Next.js + Tailwind projects and detects RTL direction issues",
+  "type": "module",
+  "bin": {
+    "rtl-check": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/muazkhaledawaja/rtl-check.git"
+  },
+  "author": "Moath Khaled <mkaawaja5000@gmail.com>",
+  "license": "MIT",
+  "keywords": ["rtl", "tailwind", "rtl-check", "cli", "nextjs", "react"],
+  "homepage": "https://github.com/muazkhaledawaja/rtl-check#readme",
+  "bugs": {
+    "url": "https://github.com/muazkhaledawaja/rtl-check/issues"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

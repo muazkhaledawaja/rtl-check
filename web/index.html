@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>rtl-check — RTL Direction Issue Scanner</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0; padding: 0; background: #0f172a; color: #f8fafc;
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+    header {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
+      padding-bottom: 16px; border-bottom: 1px solid #334155;
+    }
+    h1 { font-size: 20px; margin: 0; letter-spacing: -0.02em; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #3b82f6; color: #fff; font-size: 12px; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px; margin-left: auto;
+    }
+    .badge.zero { background: #22c55e; }
+    .card {
+      background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+      padding: 20px; margin-bottom: 20px;
+    }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #cbd5e1; }
+    textarea {
+      width: 100%; height: 200px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px; background: #0f172a; color: #e2e8f0; border: 1px solid #334155;
+      border-radius: 8px; padding: 12px; resize: vertical; outline: none;
+    }
+    textarea:focus { border-color: #3b82f6; }
+    .actions { display: flex; gap: 10px; margin-top: 12px; }
+    button {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #3b82f6; color: #fff; border: none; border-radius: 8px;
+      padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    button:hover { background: #2563eb; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: #475569; }
+    button.secondary:hover { background: #334155; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; color: #94a3b8; font-weight: 600; padding: 10px 8px; border-bottom: 1px solid #334155; }
+    td { padding: 10px 8px; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
+    tr:hover td { background: #334155; }
+    .found { color: #f87171; font-family: ui-monospace, monospace; }
+    .fix { color: #34d399; font-family: ui-monospace, monospace; }
+    .rule-id { font-size: 11px; font-weight: 600; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.05em; }
+    .empty { color: #94a3b8; font-style: italic; text-align: center; padding: 30px; }
+    .summary { font-size: 14px; font-weight: 600; margin-top: 8px; color: #cbd5e1; }
+    .summary .count { color: #f87171; }
+    .summary.zero .count { color: #22c55e; }
+    .hint { font-size: 12px; color: #64748b; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>rtl-check</h1>
+      <span class="badge" id="badge">0 issues</span>
+    </header>
+
+    <div class="card">
+      <label for="source">Paste React/Next.js + Tailwind code</label>
+      <textarea id="source" placeholder='&lt;div className="ml-4 text-left md:pr-2"&gt;
+  Hello
+&lt;/div&gt;'></textarea>
+      <div class="actions">
+        <button id="checkBtn">Check for RTL issues</button>
+        <button type="button" class="secondary" id="clearBtn">Clear</button>
+      </div>
+      <p class="hint">Detects physical direction classes (ml, mr, pl, pr, left, right, text-left, text-right, float-left, float-right, border-l, border-r, rounded-l, rounded-r) and suggests logical replacements (ms, me, ps, pe, start, end, ...).</p>
+    </div>
+
+    <div class="card">
+      <label>Results</label>
+      <div class="summary" id="summary"><span class="count zero">0</span> issue(s) found</div>
+      <table id="results">
+        <thead>
+          <tr>
+            <th style="width: 40px;">#</th>
+            <th style="width: 55px;">Line</th>
+            <th style="width: 60px;">Column</th>
+            <th>Found</th>
+            <th>Fix</th>
+            <th>Rule</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+      <div id="emptyState" class="empty" style="display:none;">No RTL direction issues found.</div>
+    </div>
+  </div>
+
+  <script>
+    // [physical, logical, exactAllowed]
+    const MAP = [
+      ["ml", "ms", false], ["mr", "me", false],
+      ["pl", "ps", false], ["pr", "pe", false],
+      ["left", "start", false], ["right", "end", false],
+      ["text-left", "text-start", true], ["text-right", "text-end", true],
+      ["float-left", "float-start", true], ["float-right", "float-end", true],
+      ["border-l", "border-s", true], ["border-r", "border-e", true],
+      ["rounded-l", "rounded-s", true], ["rounded-r", "rounded-e", true],
+    ];
+
+    function convert(token) {
+      const i = token.lastIndexOf(":");
+      const variants = i >= 0 ? token.slice(0, i + 1) : "";
+      let base = i >= 0 ? token.slice(i + 1) : token;
+      const neg = base.startsWith("-") ? "-" : "";
+      if (neg) base = base.slice(1);
+
+      for (const [from, to, exactOk] of MAP) {
+        if (base.startsWith(from + "-")) {
+          return variants + neg + to + base.slice(from.length);
+        }
+        if (exactOk && base === from) return variants + neg + to;
+      }
+      return null;
+    }
+
+    function runRule(content) {
+      const issues = [];
+      const lines = content.split("\n");
+      lines.forEach((line, idx) => {
+        const re = /[\w:\-\[\]\.\/%]+/g;
+        let m;
+        while ((m = re.exec(line))) {
+          const fix = convert(m[0]);
+          if (fix) {
+            issues.push({
+              line: idx + 1,
+              column: m.index + 1,
+              ruleId: "tailwind-physical",
+              message: "Use a logical property instead of a physical direction",
+              found: m[0],
+              fix,
+            });
+          }
+        }
+      });
+      return issues;
+    }
+
+    const sourceEl = document.getElementById("source");
+    const checkBtn = document.getElementById("checkBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const resultsBody = document.getElementById("resultsBody");
+    const emptyState = document.getElementById("emptyState");
+    const summaryEl = document.getElementById("summary");
+    const badgeEl = document.getElementById("badge");
+
+    function render(issues) {
+      resultsBody.innerHTML = "";
+      const total = issues.length;
+
+      summaryEl.innerHTML = `<span class="count ${total === 0 ? "zero" : ""}">${total}</span> issue(s) found`;
+      summaryEl.className = "summary" + (total === 0 ? " zero" : "");
+      badgeEl.textContent = total + " issue" + (total !== 1 ? "s" : "");
+      badgeEl.className = "badge" + (total === 0 ? " zero" : "");
+
+      emptyState.style.display = total === 0 ? "block" : "none";
+
+      issues.forEach((issue, i) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td>${issue.line}</td>
+          <td>${issue.column}</td>
+          <td><span class="found">${escapeHtml(issue.found)}</span></td>
+          <td><span class="fix">${escapeHtml(issue.fix)}</span></td>
+          <td><span class="rule-id">${issue.ruleId}</span></td>
+          <td>${escapeHtml(issue.message)}</td>
+        `;
+        resultsBody.appendChild(tr);
+      });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    checkBtn.addEventListener("click", () => {
+      const content = sourceEl.value;
+      if (!content.trim()) {
+        render([]);
+        return;
+      }
+      const issues = runRule(content);
+      render(issues);
+    });
+
+    clearBtn.addEventListener("click", () => {
+      sourceEl.value = "";
+      render([]);
+    });
+
+    // Initial render
+    render([]);
+  </script>
+</body>
+</html>
